@@ -89,7 +89,7 @@ ggsave(filename ="/sdf/zhangfy/1.pdf",width = 40,height = 8,units ="cm")
 ###过滤后细胞后画散点图，总样本
 options(repr.plot.width=10,repr.plot.height=7,repr.plot.res=100)
 FeatureScatter(seurat, feature1 = "nCount_RNA", feature2 = "nFeature_RNA", group.by = "orig.ident")
-
+ggsave(filename ="/sdf/zhangfy/1.pdf",width = 40,height = 8,units ="cm")
 
 ###过滤后细胞样本单独画散点图
 options(repr.plot.width=25,repr.plot.height=8)
@@ -99,8 +99,12 @@ p <- lapply(Samples, function(i){
   return(P)
 })
 wrap_plots(p, ncol = 2)
+ggplot2::ggsave(filename ="/sdf/zhangfy/1.pdf",width = 60,height = 16,units ="cm")
 
 
+#####过滤后对suerat分的cluster进行细胞数量统计
+plotC <- table(seurat@meta.data$orig.ident) %>% melt()
+colnames(plotC) <- c("Sample","Number")
 ####过滤后的样本的细胞数量
 ggplot(plotC,aes(Sample,Number,fill=Sample))+
   geom_bar(stat="identity")+theme_bw()+geom_text(aes(label = Number), vjust = -0.3, color = "black", size = 3)
@@ -144,12 +148,13 @@ ggplot2::ggsave(filename ="/sdf/zhangfy/1.pdf",width = 50,height = 20,units ="cm
 options(repr.plot.width=8,repr.plot.height=6)
 DimHeatmap(seurat, dims = 1:2, cells = 500, balanced = TRUE,ncol=3, reduction = "pca")
 
+
 ###PCA的细胞周期图
 options(repr.plot.width=10,repr.plot.height=4)
 p1 <- DimPlot(seurat, reduction = "pca", group.by = "Phase")
 p2 <- DimPlot(seurat, reduction = "pca", group.by = "orig.ident")
 wrap_plots(list(p1, p2), ncol = 2)
-
+ggplot2::ggsave(filename ="/sdf/zhangfy/1.pdf",width = 50,height = 20,units ="cm")
 
 ###对变量进行回归
 seurat <- ScaleData(seurat,features = all.genes,
@@ -159,6 +164,7 @@ options(repr.plot.width=10,repr.plot.height=4)
 p1 <- DimPlot(seurat, reduction = "pca", group.by = "Phase")
 p2 <- DimPlot(seurat, reduction = "pca", group.by = "orig.ident")
 wrap_plots(list(p1, p2), ncol = 2)
+ggplot2::ggsave(filename ="/sdf/zhangfy/1.pdf",width = 50,height = 20,units ="cm")
 print(seurat[["pca"]], dims = 1:5, nfeatures = 10)
 
 
@@ -166,7 +172,7 @@ print(seurat[["pca"]], dims = 1:5, nfeatures = 10)
 ###对变量进行回归后PCA基因图
 options(repr.plot.width=15,repr.plot.height=6)
 VizDimLoadings(seurat, dims = 1:5, reduction = "pca", ncol = 5)
-
+ggplot2::ggsave(filename ="/sdf/zhangfy/1.pdf",width = 50,height = 20,units ="cm")
 
 
 ###对变量进行回归后PCA基因热图
@@ -183,6 +189,7 @@ wrap_plots(list(p1, p2), ncol = 2)
 ###对变量进行回归后PCA按样本拆分
 options(repr.plot.width=25,repr.plot.height=8)
 DimPlot(seurat, reduction = "pca", group.by = "Phase", split.by = "orig.ident",ncol =5)
+ggplot2::ggsave(filename ="/sdf/zhangfy/1.pdf",width = 50,height = 20,units ="cm")
 
 
 
@@ -190,21 +197,25 @@ DimPlot(seurat, reduction = "pca", group.by = "Phase", split.by = "orig.ident",n
 ###进行UMAP与tsne
 options(repr.plot.width=10,repr.plot.height=4)
 ElbowPlot(seurat, ndims = 50)
-suppressMessages(seurat <- RunUMAP(seurat, dims = 1:20,min.dist = 1, spread = 3))
-suppressMessages(seurat <- RunTSNE(seurat, dims = 1:20,num_threads=12, exaggeration_factor=24))
+ggplot2::ggsave(filename ="/sdf/zhangfy/1.pdf",width = 50,height = 20,units ="cm")
+
+suppressMessages(seurat <- RunUMAP(seurat, dims = 1:40))
+suppressMessages(seurat <- RunTSNE(seurat, dims = 1:40))
 options(repr.plot.width=15,repr.plot.height=6)
 p1 <- DimPlot(seurat, reduction = "umap", group.by = "orig.ident")
 p2 <- DimPlot(seurat, reduction = "tsne", group.by = "orig.ident")
 wrap_plots(list(p1, p2), ncol = 2)
-
+ggplot2::ggsave(filename ="/sdf/zhangfy/1.pdf",width = 50,height = 20,units ="cm")
 
 ###使用harmony进行去批次
 suppressMessages(library(harmony))
 seurat <- RunHarmony(seurat, group.by.vars = "orig.ident")
-seurat(seurat <- RunUMAP(seurat, reduction = "harmony",reduction.name = "humap",
-                         reduction.key = "HUMAP_",dims = 1:30,n.neighbors = 30L, min.dist =1, spread=1))
+ElbowPlot(seurat, ndims = 50,reduction = "harmony")
+ggplot2::ggsave(filename ="/sdf/zhangfy/1.pdf",width = 50,height = 20,units ="cm")
+suppressMessages(seurat <- RunUMAP(seurat, reduction = "harmony",reduction.name = "humap",
+                         reduction.key = "HUMAP_",dims = 1:40))
 suppressMessages(seurat <- RunTSNE(seurat, reduction = "harmony", reduction.name = "htsne",
-                                   reduction.key = "htSNE_",dims = 1:30,num_threads=12, exaggeration_factor=24))
+                                   reduction.key = "htSNE_",dims = 1:40))
 
 
 ####去批次后画图
@@ -212,24 +223,40 @@ options(repr.plot.width=15,repr.plot.height=6)
 p1 <- DimPlot(seurat, reduction = "humap", group.by = "orig.ident")
 p2 <- DimPlot(seurat, reduction = "htsne", group.by = "orig.ident")
 wrap_plots(list(p1, p2), ncol = 2)
+ggplot2::ggsave(filename ="/sdf/zhangfy/1.pdf",width = 50,height = 20,units ="cm")
 
 
-####进行分群
-suppressMessages(seurat <- FindNeighbors(seurat,reduction = "harmony", dims = 1:10,k.param = 30))
+####进行分群umap
+suppressMessages(seurat <- FindNeighbors(seurat,reduction = "harmony", dims = 1:40))
 suppressMessages(seurat <- FindClusters(seurat, resolution = 0.5))
 options(repr.plot.width=15,repr.plot.height=6)
 p1 <- DimPlot(seurat, reduction = "humap", group.by = "orig.ident")
 p2 <- DimPlot(seurat, reduction = "humap", group.by = "RNA_snn_res.0.5", label = T)
 wrap_plots(list(p1, p2), ncol = 2)
+ggplot2::ggsave(filename ="/sdf/zhangfy/1.pdf",width = 50,height = 20,units ="cm")
 
+####进行分群tSNE
+suppressMessages(seurat <- FindNeighbors(seurat,reduction = "harmony", dims = 1:40))
+suppressMessages(seurat <- FindClusters(seurat, resolution = 0.5))
+options(repr.plot.width=15,repr.plot.height=6)
+p1 <- DimPlot(seurat, reduction = "htsne", group.by = "orig.ident")
+p2 <- DimPlot(seurat, reduction = "htsne", group.by = "RNA_snn_res.0.5", label = T)
+wrap_plots(list(p1, p2), ncol = 2)
+ggplot2::ggsave(filename ="/sdf/zhangfy/1.pdf",width = 50,height = 20,units ="cm")
 
 #####对suerat分的cluster进行细胞数量统计
-plotC <- table(seurat@meta.data$orig.ident, seurat$integrated_snn_res.3.5 ) %>% melt()
-colnames(plotC) <- c("Sample", "CellType","Number")
-long<-max(unique(plotC$CellType))
-plotC$CellType<-as.character(plotC$CellType) %>% factor(, levels = c(0:long))
-ggplot(plotC,aes(Sample,fill=Sample))+
-  geom_bar()+theme_bw()
+plotC <- table(seurat@meta.data$orig.ident, seurat$RNA_snn_res.0.5 ) %>% melt()
+colnames(plotC) <- c("Sample", "cluster","Number")
+long<-max(unique(plotC$cluster))
+plotC$per<-plotC$Number/sum(plotC$Number)
+plotC$cluster<-as.character(plotC$cluster) %>% factor(, levels = c(0:long))
+ggplot(plotC,aes(cluster,per,fill=Sample))+
+  geom_bar(stat="identity",width = 0.4)+theme_bw()
+ggplot2::ggsave(filename ="/sdf/zhangfy/1.pdf",width = 40,height = 20,units ="cm")
+####统计样本的绝对细胞数量
+ggplot(plotC,aes(cluster,Number))+geom_col(aes(fill=Sample), position="dodge",width = 0.4)+theme_bw()
+ggplot2::ggsave(filename ="/sdf/zhangfy/1.pdf",width = 40,height = 20,units ="cm")
+  
 
 
 ####tSNE样本高亮
@@ -237,13 +264,14 @@ options(repr.plot.width=25,repr.plot.height=10)
 DimPlot(seurat, reduction = "htsne", group.by = "orig.ident",pt.size = 0.3) +gghighlight::gghighlight()+
   facet_wrap(~ orig.ident, ncol = 5, scales = "free") + 
   theme(strip.background= element_blank())
-
+ggplot2::ggsave(filename ="/sdf/zhangfy/1.pdf",width = 50,height = 20,units ="cm")
 
 ####UMAP样本高亮
 options(repr.plot.width=25,repr.plot.height=10)
 DimPlot(seurat, reduction = "humap", group.by = "orig.ident",pt.size = 0.3) +gghighlight::gghighlight()+
   facet_wrap(~ orig.ident, ncol = 5, scales = "free") + 
   theme(strip.background= element_blank())
+ggplot2::ggsave(filename ="/sdf/zhangfy/1.pdf",width = 50,height = 20,units ="cm")
 
 
 
@@ -251,7 +279,7 @@ DimPlot(seurat, reduction = "humap", group.by = "orig.ident",pt.size = 0.3) +ggh
 ####单个样本高亮
 options(repr.plot.width=6,repr.plot.height=5)
 Highlitght= (seurat$orig.ident%>% unique)[1]
-Highlight.Dimplot(seurat, reduction = "htsne", group.by = "orig.ident", pt.size = 0.3, Highlitght =Highlitght) +
+DimPlot(seurat, reduction = "htsne", group.by = "orig.ident", pt.size = 0.3, Highlitght =Highlitght) +
   gghighlight::gghighlight(orig.ident == Highlitght) + labs(title = Highlitght)
 
 options(repr.plot.width=6,repr.plot.height=5)
