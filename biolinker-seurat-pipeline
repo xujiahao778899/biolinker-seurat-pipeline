@@ -1,0 +1,410 @@
+.libPaths("/sdf/xujiahao/package/")
+library(dplyr)
+library(Seurat)
+library(patchwork)
+library(reshape2)
+library(ggplot2)
+###参数
+###
+paste0()
+input<-list.files("/sdf/zhangfy/",pattern = 'seurat')
+seurat<-list()
+k<-0
+for (i in input) {
+  print(i)
+  k<-k+1
+  z<-readRDS(paste0("/sdf/zhangfy/",i))
+  DefaultAssay(z)<-"RNA"
+  seurat[[k]]<-z
+  seurat[[k]][["percent.mt"]] <- PercentageFeatureSet(seurat[[k]], pattern = "^MT-")
+  seurat[[k]]<-RenameCells(seurat[[k]],add.cell.id = k)
+}
+seurat<-merge(seurat[[1]],y=seurat[-1])
+
+
+for (i in meta$tag) {
+  seurat
+  
+}
+
+seurat<-readRDS("/sdf/xujiahao/test/seurat/WTA_seurat_myeloid_merge.rds")
+
+
+#####对suerat分的cluster进行细胞数量统计
+plotC <- table(seurat@meta.data$orig.ident) %>% melt()
+colnames(plotC) <- c("Sample","Number")
+####统计样本的绝对细胞数量
+ggplot(plotC,aes(Sample,Number,fill=Sample))+
+  geom_bar(stat="identity")+theme_bw()+geom_text(aes(label = Number), vjust = -0.3, color = "black", size = 3)
+ggsave("/sdf/zhangfy/1.pdf",width = 20,height = 12,units ="cm")
+
+
+####小提琴图质控
+options(repr.plot.width=20,repr.plot.height=4)
+VlnPlot(seurat, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"),
+        group.by = "orig.ident",pt.size = 0)
+ggsave(filename ="/sdf/zhangfy/1.pdf",width = 40,height = 8,units ="cm")
+
+
+
+###不过滤细胞与过滤细胞的散点图
+seurat_list<-SplitObject(seurat,split.by = "orig.ident")
+Samples <- c(1:length(seurat_list))
+options(repr.plot.width=18,repr.plot.height=4)
+P <- lapply(Samples, function(x){
+  p <- FeatureScatter(seurat_list[[x]], feature1 = "nCount_RNA", feature2 = "nFeature_RNA", group.by = "orig.ident")
+  return(p)
+})
+wrap_plots(P, ncol = 5)
+ggsave(filename ="/sdf/zhangfy/1.pdf",width = 60,height = 16,units ="cm")
+
+
+
+###过滤后的细胞散点图
+P <- lapply(Samples, function(x){
+  p <- FeatureScatter(seurat_list[[x]], feature1 = "nCount_RNA", feature2 = "nFeature_RNA", group.by = "orig.ident")+
+    FeatureScatter(subset(seurat_list[[x]],subset =nCount_RNA < 30000 & nFeature_RNA>200) , feature1 = "nCount_RNA", 
+                   feature2 = "nFeature_RNA", group.by = "orig.ident")
+  return(p)
+})
+wrap_plots(P, ncol = 1)
+ggsave(filename ="/sdf/zhangfy/1.pdf",width = 20,height = 80,units ="cm")
+
+
+
+
+
+
+#####过滤细胞后画小提琴图
+seurat <- subset(seurat, subset = nFeature_RNA >= 200 & percent.mt <= 30 & nCount_RNA <100000)
+options(repr.plot.width=25,repr.plot.height=5)
+VlnPlot(seurat, features = c("nFeature_RNA", "nCount_RNA",'percent.mt'),
+        group.by = "orig.ident",ncol = 4,log = F,pt.size = 0)
+ggsave(filename ="/sdf/zhangfy/1.pdf",width = 40,height = 8,units ="cm")
+
+
+
+
+
+###过滤后细胞后画散点图，总样本
+options(repr.plot.width=10,repr.plot.height=7,repr.plot.res=100)
+FeatureScatter(seurat, feature1 = "nCount_RNA", feature2 = "nFeature_RNA", group.by = "orig.ident")
+
+
+###过滤后细胞样本单独画散点图
+options(repr.plot.width=25,repr.plot.height=8)
+Samples<- seurat$orig.ident %>% unique
+p <- lapply(Samples, function(i){
+  P <- FeatureScatter(subset(seurat,subset = orig.ident == i) , feature1 = "nCount_RNA", feature2 = "nFeature_RNA", group.by = "orig.ident")
+  return(P)
+})
+wrap_plots(p, ncol = 2)
+
+
+####过滤后的样本的细胞数量
+ggplot(plotC,aes(Sample,Number,fill=Sample))+
+  geom_bar(stat="identity")+theme_bw()+geom_text(aes(label = Number), vjust = -0.3, color = "black", size = 3)
+ggsave("/sdf/zhangfy/1.pdf",width = 20,height = 12,units ="cm")
+
+
+
+####过滤后进行标准化与高变基因可视化
+seurat <- NormalizeData(seurat)
+seurat <- FindVariableFeatures(seurat)
+TopN <- 10
+options(repr.plot.width=6,repr.plot.height=4)
+LabelPoints(VariableFeaturePlot(seurat), points = head(VariableFeatures(seurat), TopN))
+head(VariableFeatures(seurat), TopN)
+ggsave("/sdf/zhangfy/1.pdf",width = 20,height = 12,units ="cm")
+
+####过滤后进行标准化后进行细胞周期打分
+all.genes <- rownames(seurat)
+seurat <- ScaleData(seurat,features = all.genes)
+g2m_genes <- cc.genes$g2m.genes
+g2m_genes <- CaseMatch(search=g2m_genes, match=rownames(seurat))
+s_genes <- cc.genes$s.genes
+s_genes <- CaseMatch(search=s_genes, match=rownames(seurat))
+seurat <- CellCycleScoring(seurat, g2m.features=g2m_genes, s.features=s_genes)
+seurat <- RunPCA(seurat,features = c(g2m_genes,s_genes))
+VizDimLoadings(seurat, dims = 1:5, reduction = "pca", ncol = 5)
+ggplot2::ggsave(filename ="/sdf/zhangfy/1.pdf",width = 50,height = 20,units ="cm")
+
+####过滤后进行标准化后对细胞周期基因进行气泡图
+options(repr.plot.width=24,repr.plot.height=4)
+DotPlot(seurat, features = c(g2m_genes,s_genes), 
+        group.by = "Phase",cols = "RdYlBu") + RotatedAxis()
+ggplot2::ggsave(filename ="/sdf/zhangfy/1.pdf",width = 100,height = 20,units ="cm")
+
+####过滤后进行标准化后对细胞周期基因进行山脊图
+options(repr.plot.width=8,repr.plot.height=4)
+RidgePlot(seurat, features = c("Pcna", "Usp1", "Ctcf", "Anp32e"), ncol = 2, group.by = "Phase")
+ggplot2::ggsave(filename ="/sdf/zhangfy/1.pdf",width = 50,height = 20,units ="cm")
+
+####PCA基因热图
+options(repr.plot.width=8,repr.plot.height=6)
+DimHeatmap(seurat, dims = 1:2, cells = 500, balanced = TRUE,ncol=3, reduction = "pca")
+
+###PCA的细胞周期图
+options(repr.plot.width=10,repr.plot.height=4)
+p1 <- DimPlot(seurat, reduction = "pca", group.by = "Phase")
+p2 <- DimPlot(seurat, reduction = "pca", group.by = "orig.ident")
+wrap_plots(list(p1, p2), ncol = 2)
+
+
+###对变量进行回归
+seurat <- ScaleData(seurat,features = all.genes,
+                    vars.to.regress = c("S.Score", "G2M.Score", "percent.mt"))
+seurat <- RunPCA(seurat)
+options(repr.plot.width=10,repr.plot.height=4)
+p1 <- DimPlot(seurat, reduction = "pca", group.by = "Phase")
+p2 <- DimPlot(seurat, reduction = "pca", group.by = "orig.ident")
+wrap_plots(list(p1, p2), ncol = 2)
+print(seurat[["pca"]], dims = 1:5, nfeatures = 10)
+
+
+
+###对变量进行回归后PCA基因图
+options(repr.plot.width=15,repr.plot.height=6)
+VizDimLoadings(seurat, dims = 1:5, reduction = "pca", ncol = 5)
+
+
+
+###对变量进行回归后PCA基因热图
+options(repr.plot.width=16,repr.plot.height=8)
+DimHeatmap(seurat, dims = 1:9, cells = 500, balanced = TRUE,ncol=3, reduction = "pca")
+
+
+###对变量进行回归后PCA dotplot
+options(repr.plot.width=10,repr.plot.height=4)
+p1 <- DimPlot(seurat, reduction = "pca", group.by = "Phase")
+p2 <- DimPlot(seurat, reduction = "pca", group.by = "orig.ident")
+wrap_plots(list(p1, p2), ncol = 2)
+
+###对变量进行回归后PCA按样本拆分
+options(repr.plot.width=25,repr.plot.height=8)
+DimPlot(seurat, reduction = "pca", group.by = "Phase", split.by = "orig.ident",ncol =5)
+
+
+
+
+###进行UMAP与tsne
+options(repr.plot.width=10,repr.plot.height=4)
+ElbowPlot(seurat, ndims = 50)
+suppressMessages(seurat <- RunUMAP(seurat, dims = 1:20,min.dist = 1, spread = 3))
+suppressMessages(seurat <- RunTSNE(seurat, dims = 1:20,num_threads=12, exaggeration_factor=24))
+options(repr.plot.width=15,repr.plot.height=6)
+p1 <- DimPlot(seurat, reduction = "umap", group.by = "orig.ident")
+p2 <- DimPlot(seurat, reduction = "tsne", group.by = "orig.ident")
+wrap_plots(list(p1, p2), ncol = 2)
+
+
+###使用harmony进行去批次
+suppressMessages(library(harmony))
+seurat <- RunHarmony(seurat, group.by.vars = "orig.ident")
+seurat(seurat <- RunUMAP(seurat, reduction = "harmony",reduction.name = "humap",
+                         reduction.key = "HUMAP_",dims = 1:30,n.neighbors = 30L, min.dist =1, spread=1))
+suppressMessages(seurat <- RunTSNE(seurat, reduction = "harmony", reduction.name = "htsne",
+                                   reduction.key = "htSNE_",dims = 1:30,num_threads=12, exaggeration_factor=24))
+
+
+####去批次后画图
+options(repr.plot.width=15,repr.plot.height=6)
+p1 <- DimPlot(seurat, reduction = "humap", group.by = "orig.ident")
+p2 <- DimPlot(seurat, reduction = "htsne", group.by = "orig.ident")
+wrap_plots(list(p1, p2), ncol = 2)
+
+
+####进行分群
+suppressMessages(seurat <- FindNeighbors(seurat,reduction = "harmony", dims = 1:10,k.param = 30))
+suppressMessages(seurat <- FindClusters(seurat, resolution = 0.5))
+options(repr.plot.width=15,repr.plot.height=6)
+p1 <- DimPlot(seurat, reduction = "humap", group.by = "orig.ident")
+p2 <- DimPlot(seurat, reduction = "humap", group.by = "RNA_snn_res.0.5", label = T)
+wrap_plots(list(p1, p2), ncol = 2)
+
+
+#####对suerat分的cluster进行细胞数量统计
+plotC <- table(seurat@meta.data$orig.ident, seurat$integrated_snn_res.3.5 ) %>% melt()
+colnames(plotC) <- c("Sample", "CellType","Number")
+long<-max(unique(plotC$CellType))
+plotC$CellType<-as.character(plotC$CellType) %>% factor(, levels = c(0:long))
+ggplot(plotC,aes(Sample,fill=Sample))+
+  geom_bar()+theme_bw()
+
+
+####tSNE样本高亮
+options(repr.plot.width=25,repr.plot.height=10)
+DimPlot(seurat, reduction = "htsne", group.by = "orig.ident",pt.size = 0.3) +gghighlight::gghighlight()+
+  facet_wrap(~ orig.ident, ncol = 5, scales = "free") + 
+  theme(strip.background= element_blank())
+
+
+####UMAP样本高亮
+options(repr.plot.width=25,repr.plot.height=10)
+DimPlot(seurat, reduction = "humap", group.by = "orig.ident",pt.size = 0.3) +gghighlight::gghighlight()+
+  facet_wrap(~ orig.ident, ncol = 5, scales = "free") + 
+  theme(strip.background= element_blank())
+
+
+
+
+####单个样本高亮
+options(repr.plot.width=6,repr.plot.height=5)
+Highlitght= (seurat$orig.ident%>% unique)[1]
+Highlight.Dimplot(seurat, reduction = "htsne", group.by = "orig.ident", pt.size = 0.3, Highlitght =Highlitght) +
+  gghighlight::gghighlight(orig.ident == Highlitght) + labs(title = Highlitght)
+
+options(repr.plot.width=6,repr.plot.height=5)
+Highlitght="1"
+Highlight.Dimplot(seurat, reduction = "htsne", group.by = "seurat_clusters", pt.size = 0.3, Highlitght =Highlitght)+
+  gghighlight::gghighlight(seurat_clusters == Highlitght) + labs(title = Highlitght)
+
+
+
+####cluster高亮
+options(repr.plot.width=20,repr.plot.height=16)
+DimPlot(seurat, reduction = "humap", group.by = "RNA_snn_res.0.5",pt.size = 1) +gghighlight::gghighlight()+
+  facet_wrap(~ seurat_clusters, ncol = 5, scales = "free") + 
+  theme(strip.background= element_blank())
+
+
+options(repr.plot.width=20,repr.plot.height=16)
+DimPlot(seurat, reduction = "htsne", group.by = "RNA_snn_res.0.5",pt.size = 1) +gghighlight::gghighlight()+
+  facet_wrap(~ seurat_clusters, ncol = 5, scales = "free") + 
+  theme(strip.background= element_blank())
+
+
+
+#####样本切开画图umap
+Samples <- seurat$orig.ident %>% unique %>% sort
+P <- lapply(Samples, function(x){
+  Object <- subset(seurat, subset = orig.ident==x)
+  p <- DimPlot(Object, reduction = "humap", group.by = "seurat_clusters", pt.size = 1) 
+  p <- p + labs(title = x)
+  return(p)
+})
+options(repr.plot.width=28,repr.plot.height=10)
+wrap_plots(P, ncol = 5)
+
+#####样本切开画图tsne
+options(repr.plot.width=25,repr.plot.height=10)
+Samples <- seurat$orig.ident %>% unique %>% sort
+P <- lapply(Samples, function(x){
+  Object <- subset(seurat, subset = orig.ident==x)
+  p <- DimPlot(seurat, reduction = "htsne", group.by = "seurat_clusters", pt.size = 1) 
+  p <- p + labs(title = x)
+  return(p)
+})
+wrap_plots(P, ncol = 5)
+
+
+
+
+#####对suerat分的cluster进行细胞数量统计
+plotC <- table(seurat@meta.data$orig.ident, seurat$integrated_snn_res.3.5) %>% melt()
+colnames(plotC) <- c("Sample", "CellType","Number")
+long<-max(unique(plotC$CellType))
+plotC$CellType<-as.character(plotC$CellType) %>% factor(, levels = c(0:long))
+ggplot(plotC,aes(Sample,Number,fill=CellType))+
+  geom_bar(stat="identity")+theme_bw()
+
+1cell_type_percentage <- table(SeuratObject$RNA_snn_res.0.5) / length(SeuratObject$RNA_snn_res.0.5) * 100
+
+# 创建一个数据框
+data_df <- data.frame(CellType = names(cell_type_percentage), Percentage = cell_type_percentage)
+
+# 创建百分比堆叠图
+ggplot(data=plotC, aes(x = Sample,y = Number,fill=CellType)) +
+  geom_bar(stat = "identity", width=0.8,aes(group=CellType),position="stack") +
+  theme_void() +theme_bw()+
+  labs(title = "Cell Type Percentage Stack Plot")
+
+
+
+
+
+
+
+
+
+
+
+seurat$seurat_clusters  <- as.character(seurat$seurat_clusters) %>% factor(., levels = c(0:18))
+options(repr.plot.width=15,repr.plot.height=4)
+Dis.plot(seurat, y = "seurat_clusters", x = "orig.ident")
+
+options(repr.plot.width=15,repr.plot.height=4)
+Dis.plot(seurat, x = "seurat_clusters", y = "orig.ident")
+
+options(repr.plot.width=15,repr.plot.height=4)
+Dis.plot(seurat, x = "seurat_clusters", y = "orig.ident",ratio = F)
+
+
+
+Idents(seurat) <- seurat$seurat_clusters
+cluster1.markers <- FindMarkers(seurat, ident.1 = 1, min.pct = 0.25)
+cluster1.markers %>% head(3)
+cluster5.markers <- FindMarkers(seurat, ident.1 = 5, ident.2 = c(0, 3), min.pct = 0.25)
+cluster5.markers %>% head(3)
+
+suppressMessages(markers <- FindAllMarkers(seurat, only.pos = TRUE))
+saveRDS(markers,'Marker_seuretcluster.rds')
+markers <- readRDS('Marker_seuretcluster.rds')
+write.csv(markers, 
+          'Tables/All Cells/Seurat cluster marker genes.csv')
+markers %>% head(3)
+
+markers_top <- markers %>% group_by(cluster) %>% top_n(n = 5, wt = avg_log2FC)
+markers_top %>% head(3)
+
+options(repr.plot.width=30,repr.plot.height=12)
+DoHeatmap(subset(seurat, downsample = 500), 
+          features = markers_top$gene %>% unique,group.by = "seurat_clusters")
+
+options(repr.plot.width=25,repr.plot.height=10)
+DotPlot(seurat, features = markers_top$gene %>% unique,cols = "RdYlBu", 
+        group.by = "seurat_clusters")+RotatedAxis()
+
+
+
+
+
+
+
+
+
+
+
+
+
+seurat<-readRDS(paste0("/sdf/zhangfy/",i))
+seurat[["percent.mt"]] <- PercentageFeatureSet(seurat, pattern = "^MT-")
+VlnPlot(seurat, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"),pt.size = 0,group.by = "orig.ident")
+
+
+pbmc <- NormalizeData(pbmc)
+pbmc <- FindVariableFeatures(pbmc, selection.method = "vst", nfeatures = 2000)
+all.genes <- rownames(pbmc)
+pbmc <- ScaleData(pbmc, features = all.genes)
+pbmc <- RunPCA(pbmc, features = VariableFeatures(object = pbmc))
+ElbowPlot(pbmc)
+
+
+
+pbmc <- FindNeighbors(pbmc, dims = 1:10)
+pbmc <- FindClusters(pbmc, resolution = 0.5)
+
+
+pbmc <- RunUMAP(pbmc, dims = 1:10)
+DimPlot(pbmc, reduction = "umap")
+
+pbmc.markers <- FindAllMarkers(pbmc, only.pos = F, min.pct = 0.25, logfc.threshold = 0.25)
+pbmc.markers %>%
+  group_by(cluster) %>%
+  slice_max(n = 2, order_by = avg_log2FC)
+
+pbmc.markers %>%
+  group_by(cluster) %>%
+  top_n(n = 10, wt = avg_log2FC) -> top10
+DoHeatmap(pbmc, features = top10$gene) + NoLegend()
+
